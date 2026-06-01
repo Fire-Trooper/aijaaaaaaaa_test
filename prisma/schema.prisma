@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Bank {
+  id               String            @id @default(cuid())
+  bankName         String
+  accountNumber    String
+  accountName      String
+  logoUrl          String?
+  projects         Project[]
+  paymentTransfers PaymentTransfer[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model Project {
+  id           String   @id @default(cuid())
+  name         String
+  utilityYear  String
+  entityType   String   @default("INDIVIDUAL")
+  transferDate DateTime?
+  bank         Bank?    @relation(fields: [bankId], references: [id])
+  bankId       String?
+  zones        Zone[]
+  plots        Plot[]   // 🔥 เพิ่มความสัมพันธ์กับแปลงที่ดิน
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Zone {
+  id        String   @id @default(cuid())
+  name      String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  deeds     Deed[]   
+  plots     Plot[]   // ✅ แก้ไขแล้ว: เพิ่มตรงนี้เพื่อให้รู้จัก Plot
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Deed {
+  id                 String     @id @default(cuid())
+  deedNumber         String
+  landNumber         String
+  surveyPage         String
+  utmNo              String
+  subDistrict        String
+  district           String
+  province           String
+  powerOfAttorneyPdf String?    
+  zones              Zone[]     
+  contracts          Contract[] // 1 โฉนดอยู่ได้หลายสัญญา (เผื่อย้าย/ยกเลิก)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model Customer {
+  id             String     @id @default(cuid())
+  isCorporate    Boolean    @default(false)
+  fullName       String
+  idCard         String     @unique
+  birthDate      DateTime?  // เปลี่ยนจาก age เป็น birthDate
+  addressNumber  String?
+  moo            String?
+  subDistrict    String?
+  district       String?
+  province       String?
+  phone          String?
+  secondaryPhone String?
+  contracts      Contract[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+// 🔥 ตารางใหม่: แปลงที่ดิน
+model Plot {
+  id          String    @id @default(cuid())
+  plotName    String    // ชื่อแปลง เช่น A1, A2
+  areaSqWa    Float     // พื้นที่รวม (ตารางวา) ทศนิยม 2 ตำแหน่ง
+  status      String    @default("ว่าง") // "ว่าง", "จอง", "ทำสัญญา", "โอนแล้ว"
+  
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  
+  zone        Zone?     @relation(fields: [zoneId], references: [id]) 
+  zoneId      String?   
+  
+  contract    Contract? @relation(fields: [contractId], references: [id])
+  contractId  String?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Contract {
+  id                   String            @id @default(cuid())
+  version              Int               @default(1) // 🔥 เก็บ Version ของสัญญา
+  contractDate         DateTime
+  contractType         String    
+  entityType           String    
+  
+  customer             Customer          @relation(fields: [customerId], references: [id])
+  customerId           String
+  
+  deeds                Deed[]            
+  plots                Plot[]    // 🔥 1 สัญญา มีได้หลายแปลง
+  areaRai              Float?
+  areaNgan             Float?
+  areaWa               Float?
+  totalPrice           Float
+  deposit              Float
+  remainingPrice       Float
+  installmentsCount    Int?
+  installmentAmount    Float?
+  installmentStartDate DateTime?
+  installmentPayDay    String?
+  contractEndDate      DateTime?
+  contractEndYear      String?
+  cashReceive          Float?
+  transferReceive      Float?
+  revisions            ContractRevision[] // ประวัติการแก้ไข
+  editLogs             String?   // เก็บ Log การแก้ไขเป็น JSON String
+  paymentTransfers     PaymentTransfer[]
+  contractFilePath     String?
+  receiptFilePath      String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+// 🔥 ตารางใหม่: ประวัติการแก้ไขสัญญา (Log)
+model ContractRevision {
+  id           String   @id @default(cuid())
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId   String
+  version      Int      // Version ที่แก้ไข
+  action       String   // เช่น "สร้างสัญญา", "แก้ไขราคา", "เพิ่มแปลง"
+  changesJSON  String   // เก็บ Log ว่าเปลี่ยนอะไรไปบ้างในรูปแบบ JSON
+  editedBy     String   @default("System")
+  createdAt    DateTime @default(now())
+}
+
+model PaymentTransfer {
+  id         String   @id @default(cuid())
+  amount     Float
+  slipUrl    String?
+  bank       Bank     @relation(fields: [bankId], references: [id])
+  bankId     String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId String
+  createdAt  DateTime @default(now())
+}
+
+model Template {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   
+  filePath   String
+  uploadedAt DateTime @default(now())
+}
